@@ -1,0 +1,549 @@
+/* File       : AsteroidGame.txt
+ * Author     : Brian Fiala
+ * Date       : 10/12/14
+ * Attribution: some code used with permission from Professor Mousallam,
+ *              CS1C Data Structures and Algorithms, Foothill Community College
+ * Description: AsteroidGame is a java game wherein the player controls a canon
+ *              to fire at incoming asteroids. 
+ * Controls   : 'j' move canon left
+ *              'k' move canon right
+ *              ' ' fire canon
+ *              'q' quit game
+ * Note       : Game ends when the number of hits on the station exceeds 400,
+ *              or after one hour, whichever comes first
+ */
+
+import java.awt.*;
+import java.awt.event.*;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class AsteroidGame extends Frame {
+   
+   private int frameWidth = 500;
+   private int frameHeight = 400;
+   private AsteroidGameList<Asteroid> asteroids = 
+      new AsteroidGameList<Asteroid>();
+   private AsteroidGameList<Rocket> rockets = 
+      new AsteroidGameList<Rocket>();
+   private Station station = new Station (frameWidth/2, frameHeight-20);
+   
+   public static void main(String[] args) {
+      AsteroidGame world = new AsteroidGame();
+      world.setSize(world.frameWidth, world.frameHeight);
+      world.setResizable(false);
+      world.setVisible(true);
+      world.addKeyListener(world.new KeyDown());
+      GameMover gameThread = world.new GameMover();
+      gameThread.run();
+   } // end main
+   
+   public void paint (Graphics g) {
+      // draw ground line
+      g.setColor(Color.black);
+      g.drawLine(0, frameHeight-18, frameWidth, frameHeight-18);
+      
+      station.paint(g);
+      
+      for (int index = 1; index <= asteroids.size(); index++)
+         asteroids.peek(index).paint(g);
+      
+      for (int index = 1; index <= rockets.size(); index++)
+         rockets.peek(index).paint(g);
+   } // end paint
+   
+   private void createNewAsteroids () {
+      // create a random new asteroid – 30% of the time
+      if (Math.random() < 0.3) {
+         Asteroid newRock = new Asteroid(
+            frameWidth * Math.random(), 20,
+            10 * Math.random() - 5, 3 + 3 * Math.random());
+         asteroids.add(newRock); // add new asteroid to asteroids list
+      } // end if
+   } // end createNewAsteroids
+   
+   private void moveAsteroids() {
+      // start with the beginning of the linked list asteroids
+      ListNode<Asteroid> asteroid = asteroids.peekNode(1);
+      
+      while (asteroid != null) {
+         asteroid.getData().move(); // move asteroid
+         asteroid = asteroid.getNext(); // get next asteroid
+      } // end while
+   } // end moveAsteroids
+   
+   private void moveRockets() {
+      // start with the beginning of the linked list asteroids
+      ListNode<Rocket> rocket = rockets.peekNode(1);
+      
+      while (rocket != null) {
+         rocket.getData().move(); // move rocket
+         rocket = rocket.getNext(); // get next rocket
+      } // end while
+   } // end moveRockets
+   
+   private void removeOffScreenAsteroids() {
+      // start with the beginning of the linked list asteroids
+      ListNode<Asteroid> asteroid = asteroids.peekNode(1);
+      int index = 1;
+      
+      while (asteroid != null) {
+         // fix for x,y of asteroid not at center
+         // remove the asteroid if it has moved out of the window
+         if ( (asteroid.getData().getXCoord() + asteroid.getData().size < 0)
+            || (asteroid.getData().getXCoord() > frameWidth)
+            || (asteroid.getData().getYCoord() + asteroid.getData().size > frameHeight - 10) )
+         {
+            asteroids.remove(index);
+            asteroid = asteroids.peekNode(index); // get next asteroid
+         } // end if
+         else {
+            asteroid = asteroid.getNext();
+            index++;
+         }
+      } // end while
+   } // end removeOffScreenAsteroids
+   
+   private void removeOffScreenRockets() {
+      // start with the beginning of the linked list rockets
+      ListNode<Rocket> rocket = rockets.peekNode(1);
+      int index = 1;
+      
+      while (rocket != null) {
+         // remove the rocket if it has moved out of the window
+         if ((rocket.getData().getXCoord() + 2 < 0)
+            || ((rocket.getData().getXCoord() - 2) > frameWidth)
+            || ((rocket.getData().getYCoord() - 2) > frameHeight))
+         {
+            rockets.remove(index);
+         } // end if
+         rocket = rocket.getNext(); // get next rocket
+         index++;
+      } // end while
+   } // end removeOffScreenRockets
+   
+   private void rocketHitAsteroid() {
+      // start with the beginning of the linked list rockets
+      ListNode<Rocket> rocket = rockets.peekNode(1);
+      int index = 1;
+      
+      while (rocket != null) {
+         // remove the rocket if it has hit an asteroid
+         if (rocket.getData().hitAsteroid(asteroids))
+            rockets.remove(index);
+         rocket = rocket.getNext(); // get next rocket
+         index++;
+      } // end while
+   } // end rocketHitAsteroid
+   
+   private void asteroidHitStation() {
+      // start with the beginning of the linked list asteroids
+      ListNode<Asteroid> asteroid = asteroids.peekNode(1);
+      int index = 1;
+      
+      while (asteroid != null) {
+         station.checkHit(asteroid.getData());
+         if (asteroid.getData().hitStation)
+            asteroids.remove(index); // remove an asteroid if it hit station
+         asteroid = asteroid.getNext(); // get next asteroid
+         index++;
+      } // end while
+   } // end asteroidHitStation
+   
+   private class KeyDown extends KeyAdapter {
+      public void keyPressed(KeyEvent e) {
+         char key = e.getKeyChar();
+         switch (key) {
+            case 'j':
+               station.moveLeft();
+               break;
+            case 'k': 
+               station.moveRight(); 
+               break;
+            case ' ': 
+               rockets.add(station.fire());
+               break;
+            case 'q': 
+               System.exit(0);
+         } // end switch
+      } // end keyPressed
+   } // end inner class KeyDown
+   
+   private class TimesUp extends TimerTask {
+      public void run() {
+         System.exit(0);
+      } // end run
+   } // end inner class TimesUp
+   
+   private class GameMover extends Thread {
+      public void run() {
+         Timer timeOut = new Timer();
+         TimesUp quittingTime = new TimesUp();
+         timeOut.schedule(quittingTime, 3600000); // quit after 1 hour
+         while (true) {
+            if (station.getHits() > 400) // quit if hits exceed 400
+               System.exit(0);
+            createNewAsteroids();
+            moveAsteroids();
+            removeOffScreenAsteroids();
+            moveRockets();
+            removeOffScreenRockets();
+            rocketHitAsteroid();
+            asteroidHitStation();
+            repaint(); 
+            try  {
+               sleep(100);
+            } // end try
+            catch (Exception e) { }
+         } // end while
+      } // end run
+   } // end inner class GameMover
+   
+} // end class AsteroidGame
+
+/******************************************************************************/
+
+class Asteroid {
+   private double x, y; // position information
+   public int size = 20; // maybe make private for best practice
+   private double dx, dy; // movement per iteration
+   public boolean hitStation; // maybe make private for best practice
+   
+   public Asteroid (double ix, double iy, double idx, double idy) {
+      x=ix;
+      y=iy;
+      dx=idx;
+      dy=idy;
+   } // end constructor
+   
+   public void move() {
+      x+=dx;
+      y+=dy;
+   } // end move
+   
+   public void paint (Graphics g) {
+      g.setColor(Color.black);
+      g.drawOval((int) x, (int) y, size, size);
+      g.setColor(Color.lightGray);
+      g.fillOval((int) x, (int) y, size, size);
+   } // end paint
+   
+   public void hit () {
+      size = size - 4;
+   } // end hit
+   
+   public boolean nearTo (double tx, double ty) {
+      // use Pythagorean theorem to determine distance between points
+      double distance = Math.sqrt( (x+(size/2)-tx)*(x+(size/2)-tx)
+         + (y+(size/2)-ty)*(y+(size/2)-ty) );
+      return distance < (size / 2);
+   } // end nearTo
+   
+   public double getXCoord() {
+      return x;
+   } // end getXCoord
+   
+   public double getYCoord() {
+      return y;
+   } // end getYCoord
+   
+} // end class Asteroid
+
+/******************************************************************************/
+
+class Rocket {
+   private double x, y; // position information
+   private double dx, dy; // movement per iteration
+   
+   public Rocket (double ix, double iy, double idx, double idy) {
+      x=ix;
+      y=iy;
+      dx=idx;
+      dy=idy;
+   } // end Rocket constructor
+   
+   public void move() {
+      x+=dx;
+      y+=dy;
+   } // end move
+   
+   public boolean hitAsteroid (AsteroidGameList<Asteroid> asteroids) {
+      boolean hit = false;
+      
+      // start with the beginning of the linked list asteroids
+      ListNode<Asteroid> asteroid = asteroids.peekNode(1);
+      int index = 1;
+      
+      while (asteroid != null) {
+         if (asteroid.getData().nearTo(x+2, y+2)) {
+            asteroid.getData().hit(); // rocket hit asteroid
+            hit = true;
+         } // end if
+         
+         // remove the asteroid from the list if it is destroyed
+         if (asteroid.getData().size < 4)
+            asteroids.remove(index);
+         
+         asteroid = asteroid.getNext(); // get next asteroid
+         index++;
+      } // end while
+      return hit;
+   } // end hitAsteroid
+   
+   public void paint (Graphics g) {
+      g.setColor(Color.black);
+      g.drawOval((int) x, (int) y, 5, 5);
+      g.setColor(Color.red);
+      g.fillOval((int) x, (int) y, 5, 5);
+   } // end paint
+   
+   public double getXCoord() {
+      return x;
+   } // end getXCoord
+   
+   public double getYCoord() {
+      return y;
+   } // end getYCoord
+   
+} // end class Rocket
+
+/******************************************************************************/
+
+class Station {
+   private double angle = Math.PI / 2.0; // public static final double PI 3.141592653589793d 
+   private int hits = 0;
+   private final double x;
+   private final double y;
+   
+   public Station (double ix, double iy) {
+      x = ix;
+      y = iy;
+   } // end Station constructor
+   
+   public void moveLeft() {
+      angle = angle + 0.1;
+   } // end moveLeft
+   
+   public void moveRight() {
+      angle = angle - 0.1;
+   } // end moveRight
+   
+   public Rocket fire () {
+      double cosAngle = Math.cos(angle);
+      double sinAngle = Math.sin(angle);
+      // rocket goes same direction as gun is pointing
+      Rocket r = new Rocket(x + 15 * cosAngle, y - 15 * sinAngle,
+         5 * cosAngle, -5 * sinAngle);
+      return r;
+   } // end fire
+   
+   public void checkHit (Asteroid rock) {
+      if (rock.nearTo((double) x, (double) y) && !rock.hitStation) {
+         hits += rock.size;
+         rock.hitStation = true;
+      } // end if
+   } // end checkHit
+   
+   public int getHits() {
+      return hits;
+   }
+   
+   public void paint (Graphics g) {
+      // draw hits count
+      g.setColor(Color.black);
+      g.drawString("hits: " + hits, (int) (x - 15), (int) (y + 15));
+      
+      g.setColor (Color.blue);
+      double lv = 20 * Math.sin(angle);
+      double lh = 20 * Math.cos(angle);
+      
+      // draw the base line
+      g.drawLine((int) (x - 5), (int) y, (int) (x + 10), (int) y);
+      
+      // draw the left of the canon line
+      g.drawLine((int) x, (int) y, (int) (x + lh), (int) (y - lv));
+      
+      // draw the right of the canon line
+      g.drawLine((int) (x + 5), (int) y, (int) (x + lh + 5), (int) (y - lv));
+   } // end paint
+   
+} // end class Station
+
+/******************************************************************************/
+
+interface GameLinkedList<E>
+{
+   // adds a new ListNode<E> with newData to the end of the list
+   public void add(E newData);
+   
+   // removes the ListNode at the specified index and returns true if successful
+   public boolean remove(int index);
+   
+   // returns the data stored by the ListNode at the specified index 
+   public E peek(int index);
+   
+   // returns the ListNode at the specified index 
+   public ListNode<E> peekNode(int index);
+   
+   // returns the size of the list (possibly unused in the game)
+   public int size();
+   
+   // resets the list to empty
+   public void clear();
+   
+} // end interface GameLinkedList
+
+/******************************************************************************/
+
+class AsteroidGameList<E> implements GameLinkedList<E> {
+   
+   private ListNode<E> head;
+   private int nodeCount;
+   
+   // constructor for an empty list
+   // head is set to a node without data
+   public AsteroidGameList() {
+      head = new ListNode<E>();
+      nodeCount = 0;
+   } // end constructor
+   
+   // adds a new ListNode<E> with newData to the end of the list
+   public void add(E newData)
+   {
+      ListNode<E> temp = new ListNode<E>(newData);
+      ListNode<E> current = head;
+      
+      // find the end of the list
+      while (current.hasNext()) {
+         current = current.getNext();
+      }
+      
+      // set the end ListNode's next to our new ListNode
+      current.setNext(temp);
+      nodeCount++;
+   } // end add
+   
+   // removes the ListNode at the specified index and returns true if successful
+   public boolean remove(int index)
+   {
+      // if index is out of range, there is an error: return false
+      if (index < 1 || index > size())
+         return false;
+      
+      // find the correct ListNode corresponding to index
+      ListNode<E> current = head; // start at the head
+      
+      // loop only runs if index != head node
+      // current ends up referring to the node prior to the one to remove
+      for (int k = 1; k < index; k++) {
+         if (!current.hasNext())
+            return false; // something is wrong
+         
+         current = current.getNext();
+      } // end for
+      
+      // current is now the ListNode to prior to the one to remove
+      current.setNext(current.getNext().getNext());
+      nodeCount--;
+      return true;
+   } // end remove
+   
+   // returns the data stored by the ListNode at the specified index 
+   public E peek(int index) {
+      // index for the first node is 1
+      if (index <= 0)
+         return null;
+      
+      ListNode<E> current = head.getNext();
+      for (int i = 1; i < index; i++) {
+         if (current.getNext() == null)
+            return null;
+         
+         current = current.getNext();
+      }
+      return current.getData();
+   } // end peek
+   
+   // returns the ListNode at the specified index 
+   public ListNode<E> peekNode(int index) {
+      // index for the first node is 1
+      if (index <= 0)
+         return null;
+      
+      ListNode<E> current = head.getNext();
+      for (int i = 1; i < index; i++) {
+         if (current.getNext() == null)
+            return null;
+         
+         current = current.getNext();
+      }
+      return current;
+   } // end peekNode
+   
+   // returns the size of the list (possibly unused in the game)
+   public int size() {
+      return nodeCount;
+   } // end size
+   
+   // resets the list to empty
+   public void clear() {
+      head = null;
+      nodeCount = 0;
+   } // end clear
+   
+} // end class AsteroidGameList
+
+/******************************************************************************/
+
+class ListNode<E>
+{
+   // protected data (allows AsteroidLList access)
+   protected ListNode<E> next; // the next ListNode in the list
+   
+   // data carried by the ListNode may be of any type consistent with the list
+   protected E data;
+   
+   // constructor if we want to specify the next ListNode
+   public ListNode(E item, ListNode<E> nxtNode) {
+      data = item;
+      next = nxtNode;
+   }
+   
+   // constructor for new ListNode with specified data
+   public ListNode(E item) {
+      this(item, null);
+   }
+   
+   // default constructor (probably not used in our game)
+   public ListNode() {
+      this(null, null);
+   }
+   
+   // returns the object stored by the ListNode
+   public E getData() {
+      return data;
+   }
+   
+   // data modifier - changes the object stored by the node
+   public void setData(E item) {
+      data = item;
+   }
+   
+   // returns the next ListNode in the list
+   public ListNode<E> getNext() {
+      return next;
+   }
+   
+   // sets the next ListNode in the list (for after removal)
+   public void setNext (ListNode<E> nxtNode) {
+      next = nxtNode;
+   }
+   
+   // tests if the ListNode has a tail
+   public boolean hasNext() {
+      return (next != null);
+   }
+   
+} // end class ListNode
+
+/******************************************************************************/
