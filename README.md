@@ -1,2 +1,2 @@
 # Asteroids
-Java1C Asteroids
+Java 1C Asteroids
