@@ -1,2 +1,2 @@
 # Asteroids
-Java 1C Asteroids
+Asteroids game implemented in Java.
